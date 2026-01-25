@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>유네트 수박게임 (Expanded Basic)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+    <style>
+        body {
+            overscroll-behavior: none;
+            touch-action: none;
+            font-family: 'Noto Sans KR', sans-serif;
+            background-color: #FDF6E3;
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+        #game-wrapper {
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            transition: transform 0.1s;
+        }
+        canvas {
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+            background-color: #FFF8DC;
+            display: block; 
+        }
+        .ui-layer {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 20px;
+            z-index: 10;
+            width: 100%;
+            padding: 0 30px;
+            pointer-events: none;
+            justify-content: space-between;
+            box-sizing: border-box;
+        }
+        .score-box, .next-box {
+            background: rgba(255, 255, 255, 0.9);
+            padding: 10px 20px;
+            border-radius: 20px;
+            font-weight: bold;
+            color: #333;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            pointer-events: auto;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-width: 80px;
+        }
+        .next-box img {
+            width: 40px;
+            height: 40px;
+            object-fit: contain; 
+            margin-top: 5px;
+            filter: drop-shadow(0 2px 2px rgba(0,0,0,0.1));
+        }
+        #game-over {
+            display: none;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(255, 255, 255, 0.95);
+            padding: 40px;
+            border-radius: 20px;
+            text-align: center;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.3);
+            z-index: 20;
+            width: 80%;
+            max-width: 400px;
+        }
+        .shake-small { animation: shake 0.2s cubic-bezier(.36,.07,.19,.97) both; }
+        .shake-medium { animation: shake 0.4s cubic-bezier(.36,.07,.19,.97) both; }
+        .shake-large { animation: shake 0.6s cubic-bezier(.36,.07,.19,.97) both; }
+
+        @keyframes shake {
+            10%, 90% { transform: translate3d(-1px, 0, 0); }
+            20%, 80% { transform: translate3d(2px, 0, 0); }
+            30%, 50%, 70% { transform: translate3d(-4px, 0, 0); }
+            40%, 60% { transform: translate3d(4px, 0, 0); }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-wrapper">
+        <div class="ui-layer">
+            <div class="score-box">
+                <span class="text-xs text-gray-500">SCORE</span>
+                <span id="score" class="text-2xl text-orange-600">0</span>
+            </div>
+            <div class="next-box">
+                <span class="text-xs text-gray-500">NEXT</span>
+                <img id="next-item-img" src="" alt="Next">
+            </div>
+        </div>
+
+        <div id="game-over">
+            <h1 class="text-4xl font-bold text-gray-800 mb-2">GAME OVER</h1>
+            <p class="text-gray-600 mb-6">최종 점수: <span id="final-score" class="text-orange-600 font-bold text-2xl">0</span></p>
+            <button onclick="location.reload()" class="bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 px-8 rounded-full transition transform hover:scale-105 shadow-lg">
+                다시 하기
+            </button>
+        </div>
+    </div>
+
+    <script>
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        const audioCtx = new AudioContext();
+
+        function playPopSound(sizeFactor) {
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+            const oscillator = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+
+            oscillator.type = 'sine';
+            const startFreq = 500 - (sizeFactor * 30); 
+            const endFreq = startFreq + 150;
+
+            oscillator.frequency.setValueAtTime(startFreq, audioCtx.currentTime);
+            oscillator.frequency.exponentialRampToValueAtTime(endFreq, audioCtx.currentTime + 0.1);
+
+            gainNode.gain.setValueAtTime(0.3, audioCtx.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.15);
+
+            oscillator.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+
+            oscillator.start();
+            oscillator.stop(audioCtx.currentTime + 0.2);
+        }
+
+        // --- 게임 데이터 (맨 앞에 3단계 추가, 전체 크기 재조정) ---
+        const FRUITS = [
+            // 1. 각성 이안 (최소형)
+            { name: "각성 이안", radius: 24, score: 5, img: "https://i.ibb.co/8ks9F6B/ian-2.jpg", color: "#DC143C", sides: 0 },
+            // 2. 유네트 로고 (네모)
+            { name: "유네트 로고", radius: 32, score: 10, img: "https://i.ibb.co/nNrJkjBq/LOGO.jpg", color: "#800080", sides: 4 }, 
+            // 3. 빙
+            { name: "빙", radius: 40, score: 15, img: "https://i.ibb.co/0jSG79mX/bing.jpg", color: "#00CED1", sides: 0 },
+            
+            // 기존 멤버들 (크기를 조금씩 키워서 배치)
+            { name: "키엘", radius: 50, score: 20, img: "https://i.ibb.co/dsbpYJ2W/kiel.png", color: "#FFB6C1", sides: 0 },
+            { name: "레비르", radius: 60, score: 30, img: "https://i.ibb.co/pjpjKMht/lebileu.png", color: "#ADD8E6", sides: 8 },
+            { name: "제론", radius: 72, score: 40, img: "https://i.ibb.co/YBh3MBMt/jelon.png", color: "#90EE90", sides: 6 },
+            { name: "차티에", radius: 84, score: 50, img: "https://i.ibb.co/G3BV2926/chatie.png", color: "#FFD700", sides: 4 }, // 네모
+            { name: "필리샤", radius: 96, score: 60, img: "https://i.ibb.co/Q7D73QNT/pillisya.png", color: "#FFA07A", sides: 3 }, // 세모
+            { name: "사벨린", radius: 108, score: 70, img: "https://i.ibb.co/QvFw9ZnL/sabellin.png", color: "#DDA0DD", sides: 5 },
+            { name: "시안", radius: 122, score: 80, img: "https://i.ibb.co/8LsjcW08/sian.png", color: "#87CEEB", sides: 6 },
+            // 최종 보스 이안
+            { name: "이안", radius: 140, score: 100, img: "https://i.ibb.co/Jw84FbmS/ian.png", color: "#FF6347", sides: 0 }
+        ];
+
+        const loadedImages = {};
+        FRUITS.forEach((fruit, index) => {
+            const img = new Image();
+            img.src = fruit.img;
+            loadedImages[index] = img;
+        });
+
+        const Engine = Matter.Engine,
+              Render = Matter.Render,
+              Runner = Matter.Runner,
+              Bodies = Matter.Bodies,
+              World = Matter.World,
+              Events = Matter.Events,
+              Composite = Matter.Composite,
+              Body = Matter.Body,
+              Vector = Matter.Vector;
+
+        const GAME_WIDTH = Math.min(window.innerWidth, 550); 
+        const GAME_HEIGHT = window.innerHeight * 0.8; 
+
+        const WALL_THICKNESS = 20;
+        const GROUND_HEIGHT = 50;
+        const TOP_LIMIT = 150; 
+
+        const engine = Engine.create();
+        const world = engine.world;
+
+        engine.velocityIterations = 10;
+        engine.positionIterations = 8;
+
+        const render = Render.create({
+            element: document.getElementById('game-wrapper'),
+            engine: engine,
+            options: {
+                width: GAME_WIDTH,
+                height: GAME_HEIGHT,
+                wireframes: false,
+                background: '#FFF8DC',
+                pixelRatio: window.devicePixelRatio
+            }
+        });
+
+        // --- 파티클 ---
+        let particles = [];
+        function createParticles(x, y, color, count) {
+            for (let i = 0; i < count; i++) {
+                particles.push({
+                    x: x, y: y,
+                    vx: (Math.random() - 0.5) * 10,
+                    vy: (Math.random() - 0.5) * 10,
+                    life: 1.0, color: color,
+                    size: Math.random() * 4 + 2
+                });
+            }
+        }
+        function updateParticles() {
+            for (let i = particles.length - 1; i >= 0; i--) {
+                let p = particles[i];
+                p.x += p.vx; p.y += p.vy; p.vy += 0.2; p.life -= 0.02;
+                if (p.life <= 0) particles.splice(i, 1);
+            }
+        }
+        function drawParticles(ctx) {
+            ctx.save();
+            particles.forEach(p => {
+                ctx.globalAlpha = p.life; ctx.fillStyle = p.color;
+                ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); ctx.fill();
+            });
+            ctx.restore();
+        }
+
+        function triggerShake(intensity) {
+            const wrapper = document.getElementById('game-wrapper');
+            wrapper.classList.remove('shake-small', 'shake-medium', 'shake-large');
+            void wrapper.offsetWidth; 
+            if (intensity === 1) wrapper.classList.add('shake-small');
+            else if (intensity === 2) wrapper.classList.add('shake-medium');
+            else if (intensity === 3) wrapper.classList.add('shake-large');
+        }
+
+        // --- 렌더링 루프 ---
+        Events.on(render, 'afterRender', function() {
+            const ctx = render.context;
+            const bodies = Composite.allBodies(engine.world);
+
+            updateParticles();
+            drawParticles(ctx);
+
+            bodies.forEach(body => {
+                if (body.label === 'fruit') {
+                    const radius = body.customRadius || body.circleRadius; 
+                    const img = loadedImages[body.fruitId];
+
+                    if (img && img.complete) {
+                        ctx.save();
+                        
+                        ctx.beginPath();
+                        if (body.circleRadius) {
+                            ctx.arc(body.position.x, body.position.y, radius, 0, 2 * Math.PI);
+                        } else {
+                            const vertices = body.vertices;
+                            ctx.moveTo(vertices[0].x, vertices[0].y);
+                            for (let j = 1; j < vertices.length; j++) {
+                                ctx.lineTo(vertices[j].x, vertices[j].y);
+                            }
+                            ctx.closePath();
+                        }
+                        
+                        ctx.save();
+                        ctx.clip(); 
+
+                        ctx.translate(body.position.x, body.position.y);
+                        ctx.rotate(body.angle);
+                        ctx.drawImage(img, -radius, -radius, radius * 2, radius * 2);
+                        ctx.restore(); 
+
+                        ctx.lineWidth = 3;
+                        ctx.strokeStyle = '#000000';
+                        ctx.stroke(); 
+
+                        ctx.restore();
+                    }
+                }
+            });
+
+            ctx.save();
+            ctx.beginPath();
+            ctx.moveTo(0, TOP_LIMIT);
+            ctx.lineTo(GAME_WIDTH, TOP_LIMIT);
+            ctx.lineWidth = isDanger ? 5 : 2;
+            ctx.strokeStyle = isDanger ? '#FF0000' : 'rgba(255, 0, 0, 0.3)';
+            ctx.setLineDash([10, 10]);
+            ctx.stroke();
+            if (isDanger) {
+                 ctx.fillStyle = 'red'; ctx.font = 'bold 20px Noto Sans KR';
+                 ctx.fillText('위험!', GAME_WIDTH - 60, TOP_LIMIT - 10);
+            }
+            ctx.restore();
+        });
+
+        const ground = Bodies.rectangle(GAME_WIDTH / 2, GAME_HEIGHT - GROUND_HEIGHT / 2, GAME_WIDTH, GROUND_HEIGHT, { isStatic: true, render: { fillStyle: '#D2B48C' } });
+        const leftWall = Bodies.rectangle(WALL_THICKNESS / 2, GAME_HEIGHT / 2, WALL_THICKNESS, GAME_HEIGHT, { isStatic: true, render: { fillStyle: '#DEB887' } });
+        const rightWall = Bodies.rectangle(GAME_WIDTH - WALL_THICKNESS / 2, GAME_HEIGHT / 2, WALL_THICKNESS, GAME_HEIGHT, { isStatic: true, render: { fillStyle: '#DEB887' } });
+        World.add(world, [ground, leftWall, rightWall]);
+
+        let currentFruit = null; 
+        let nextFruitIndex = 0; 
+        let disableAction = false; 
+        let score = 0;
+        let isGameOver = false;
+        let isDanger = false; 
+
+        function getRandomFruitIndex() {
+            return Math.floor(Math.random() * 3); 
+        }
+
+        // --- 도형 바디 생성 함수 ---
+        function createFruitBody(x, y, index, isStatic = false) {
+            const fruitData = FRUITS[index];
+            let body;
+
+            // sides가 0이거나 없으면 원, 아니면 다각형
+            if (!fruitData.sides || fruitData.sides === 0) {
+                body = Bodies.circle(x, y, fruitData.radius, {
+                    label: 'fruit',
+                    isStatic: isStatic,
+                    restitution: 0.2, 
+                    friction: 0.1,    
+                    density: 0.002,
+                    render: { visible: false }
+                });
+            } else {
+                // 다각형 (N각형)
+                body = Bodies.polygon(x, y, fruitData.sides, fruitData.radius, {
+                    label: 'fruit',
+                    isStatic: isStatic,
+                    restitution: 0.2,
+                    friction: 0.1,
+                    density: 0.002,
+                    render: { visible: false }
+                });
+            }
+
+            body.fruitId = index;
+            body.customRadius = fruitData.radius; // 렌더링용 반지름 저장
+            return body;
+        }
+
+        function updateNextFruitUI() {
+            const nextData = FRUITS[nextFruitIndex];
+            document.getElementById('next-item-img').src = nextData.img;
+        }
+
+        function spawnCurrentFruit() {
+            if (isGameOver) return;
+            if (currentFruit) World.remove(world, currentFruit);
+
+            const index = nextFruitIndex;
+            nextFruitIndex = getRandomFruitIndex();
+            updateNextFruitUI();
+
+            currentFruit = createFruitBody(GAME_WIDTH / 2, 80, index, true);
+            World.add(world, currentFruit);
+            disableAction = false;
+            // 생성 직후엔 무조건 안전 (빨간불 끄기)
+            isDanger = false;
+        }
+
+        function addScore(points) {
+            score += points;
+            document.getElementById('score').innerText = score;
+        }
+
+        function getCanvasRelativeX(clientX) {
+            const canvas = render.canvas;
+            const rect = canvas.getBoundingClientRect();
+            return clientX - rect.left;
+        }
+
+        function handleInputMove(clientX) {
+            if (disableAction || !currentFruit || isGameOver) return;
+            const x = getCanvasRelativeX(clientX);
+            
+            // 바운딩 박스 기준으로 벽 제한 (도형마다 너비가 다르므로)
+            const bounds = currentFruit.bounds;
+            const halfWidth = (bounds.max.x - bounds.min.x) / 2;
+            
+            const minX = WALL_THICKNESS + halfWidth;
+            const maxX = GAME_WIDTH - WALL_THICKNESS - halfWidth;
+            
+            const clampX = Math.max(minX, Math.min(x, maxX));
+            Body.setPosition(currentFruit, { x: clampX, y: 80 });
+        }
+
+        function handleInputEnd() {
+            if (disableAction || !currentFruit || isGameOver) return;
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            disableAction = true;
+            Body.setStatic(currentFruit, false);
+            // 놓는 순간 currentFruit 해제 -> 이제부터 위험 체크 대상이 됨 (하지만 바로는 안 됨)
+            // 약간 딜레이를 줘서 바로 체크되는 것 방지
+            const droppedFruit = currentFruit;
+            currentFruit = null;
+            
+            // 떨어지는 동안에는 체크 안 되게 속도 붙을 때까지 살짝 유예
+            setTimeout(() => {
+                // 별도 로직 없음, 자연스럽게 물리엔진에 맡김
+            }, 100);
+
+            setTimeout(() => { spawnCurrentFruit(); }, 1000);
+        }
+
+        window.addEventListener('mousemove', (e) => { handleInputMove(e.clientX); });
+        window.addEventListener('mousedown', (e) => { if(e.target.closest('#game-wrapper')) handleInputEnd(); });
+        window.addEventListener('touchmove', (e) => { e.preventDefault(); handleInputMove(e.touches[0].clientX); }, { passive: false });
+        window.addEventListener('touchend', (e) => { if(e.target.closest('#game-wrapper')) handleInputEnd(); });
+
+        function applyBlast(center, force, radius) {
+            const bodies = Composite.allBodies(world);
+            bodies.forEach(body => {
+                if (body.label === 'fruit' && !body.isStatic) {
+                    const distanceVector = Vector.sub(body.position, center);
+                    const distance = Vector.magnitude(distanceVector);
+                    if (distance < radius && distance > 0) {
+                        const forceMagnitude = force * (1 - distance / radius);
+                        const forceVector = Vector.mult(Vector.normalise(distanceVector), forceMagnitude);
+                        Body.applyForce(body, body.position, forceVector);
+                    }
+                }
+            });
+        }
+
+        Events.on(engine, 'collisionStart', (event) => {
+            const pairs = event.pairs;
+            for (let i = 0; i < pairs.length; i++) {
+                const bodyA = pairs[i].bodyA;
+                const bodyB = pairs[i].bodyB;
+                if (bodyA.label === 'fruit' && bodyB.label === 'fruit') {
+                    if (bodyA.fruitId === bodyB.fruitId) {
+                        if (bodyA.isRemoved || bodyB.isRemoved) continue;
+                        if (bodyA.fruitId === FRUITS.length - 1) continue; 
+
+                        const newX = (bodyA.position.x + bodyB.position.x) / 2;
+                        const newY = (bodyA.position.y + bodyB.position.y) / 2;
+                        const newIndex = bodyA.fruitId + 1;
+
+                        bodyA.isRemoved = true; bodyB.isRemoved = true;
+                        World.remove(world, [bodyA, bodyB]);
+
+                        playPopSound(newIndex);
+                        const particleCount = 10 + (newIndex * 3);
+                        createParticles(newX, newY, FRUITS[newIndex].color, particleCount);
+
+                        if (newIndex >= 3) triggerShake(1);
+                        if (newIndex >= 5) triggerShake(2);
+                        if (newIndex >= 6) triggerShake(3);
+
+                        const newFruit = createFruitBody(newX, newY, newIndex);
+                        // 다각형은 회전시켜서 소환 (재미요소)
+                        Body.setAngle(newFruit, Math.random() * Math.PI);
+                        World.add(world, newFruit);
+                        
+                        const blastForce = 0.05 + (newIndex * 0.02); 
+                        applyBlast({x: newX, y: newY}, blastForce, 300);
+
+                        addScore(FRUITS[newIndex].score);
+                    }
+                }
+            }
+        });
+
+        let gameOverTimer = 0;
+        Events.on(engine, 'beforeUpdate', () => {
+            if (isGameOver) return;
+            const bodies = Composite.allBodies(world);
+            let checkOverflow = false;
+            bodies.forEach(body => {
+                if (body.label === 'fruit' && !body.isStatic) {
+                    // [핵심] 현재 손에 쥐고 있는 건 절대 위험으로 간주 안 함
+                    if (body === currentFruit) return;
+
+                    // 머리가 선을 넘었는지 확인
+                    if (body.bounds.min.y < TOP_LIMIT) {
+                         // 떨어지는 중(속도가 빠름)이면 패스
+                         if (body.velocity.y > 0.5) return; 
+                         checkOverflow = true;
+                    }
+                }
+            });
+            if (checkOverflow) {
+                isDanger = true;
+                gameOverTimer += 16.6; 
+                if (gameOverTimer > 1500) endGame();
+            } else {
+                isDanger = false; gameOverTimer = 0;
+            }
+        });
+
+        function endGame() {
+            isGameOver = true;
+            document.getElementById('final-score').innerText = score;
+            document.getElementById('game-over').style.display = 'block';
+            Runner.stop(runner);
+        }
+
+        nextFruitIndex = getRandomFruitIndex();
+        updateNextFruitUI();
+        spawnCurrentFruit();
+
+        Render.run(render);
+        const runner = Runner.create();
+        Runner.run(runner, engine);
+    </script>
+</body>
+</html>
