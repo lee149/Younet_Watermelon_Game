@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>유네트 수박게임 (Real Standard)</title>
+    <title>유네트 수박게임 (Fixed Official)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
     <style>
@@ -18,15 +18,16 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            overflow: hidden;
+            overflow: auto; /* 화면이 게임보다 작을 경우 스크롤 허용 */
         }
         #game-wrapper {
             position: relative;
             display: flex;
             justify-content: center;
             align-items: center;
-            width: 100%;
-            height: 100%;
+            /* 래퍼도 고정 크기 가이드라인 역할 */
+            width: 430px;
+            height: 754px;
         }
         canvas {
             border-radius: 12px;
@@ -34,10 +35,11 @@
             background-color: #FFF8DC;
             display: block;
             
-            /* 오피셜 비율 유지 */
-            max-width: 100%; 
-            max-height: 95vh; 
-            object-fit: contain;
+            /* [요청 반영] 사이즈 절대 고정 (반응형 X) */
+            width: 430px; 
+            height: 754px;
+            min-width: 430px;
+            min-height: 754px;
         }
         .ui-layer {
             position: absolute;
@@ -52,7 +54,7 @@
             pointer-events: none;
             justify-content: space-between;
             box-sizing: border-box;
-            max-width: 430px; 
+            width: 430px; /* UI도 캔버스 폭에 맞춤 */
         }
         .score-box, .next-box {
             background: rgba(255, 255, 255, 0.9);
@@ -86,8 +88,7 @@
             text-align: center;
             box-shadow: 0 20px 50px rgba(0,0,0,0.3);
             z-index: 20;
-            width: 80%;
-            max-width: 350px; 
+            width: 350px; 
         }
         .shake-small { animation: shake 0.2s cubic-bezier(.36,.07,.19,.97) both; }
         .shake-medium { animation: shake 0.4s cubic-bezier(.36,.07,.19,.97) both; }
@@ -152,30 +153,30 @@
             oscillator.stop(audioCtx.currentTime + 0.2);
         }
 
-        // --- 게임 데이터 (수박게임 오리지널 비율 적용) ---
-        // 430px 폭 기준
+        // --- 게임 데이터 (430px 폭에 맞는 오리지널 밸런스) ---
+        // 430px 고정이므로 과일 크기도 이 비율에 딱 맞춰야 게임이 성립됨
         const FRUITS = [
-            // 1. 각성 이안 (체리)
+            // 1. 각성 이안 (체리급)
             { name: "각성 이안", radius: 18, score: 5, img: "https://i.ibb.co/8ks9F6B/ian-2.jpg", color: "#DC143C", sides: 0 },
-            // 2. 유네트 로고 (딸기)
+            // 2. 유네트 로고 (딸기급)
             { name: "유네트 로고", radius: 25, score: 10, img: "https://i.ibb.co/nNrJkjBq/LOGO.jpg", color: "#800080", sides: 4 }, 
-            // 3. 빙 (포도)
+            // 3. 빙 (포도급)
             { name: "빙", radius: 32, score: 15, img: "https://i.ibb.co/0jSG79mX/bing.jpg", color: "#00CED1", sides: 0 },
-            // 4. 키엘 (한라봉)
+            // 4. 키엘 (한라봉급)
             { name: "키엘", radius: 38, score: 20, img: "https://i.ibb.co/dsbpYJ2W/kiel.png", color: "#FFB6C1", sides: 0 },
-            // 5. 레비르 (감)
+            // 5. 레비르 (감급)
             { name: "레비르", radius: 45, score: 30, img: "https://i.ibb.co/pjpjKMht/lebileu.png", color: "#ADD8E6", sides: 8 },
-            // 6. 제론 (사과)
+            // 6. 제론 (사과급)
             { name: "제론", radius: 53, score: 40, img: "https://i.ibb.co/YBh3MBMt/jelon.png", color: "#90EE90", sides: 6 },
-            // 7. 차티에 (배)
-            { name: "차티에", radius: 61, score: 50, img: "https://i.ibb.co/G3BV2926/chatie.png", color: "#FFD700", sides: 4 }, // 네모
-            // 8. 필리샤 (복숭아)
-            { name: "필리샤", radius: 70, score: 60, img: "https://i.ibb.co/Q7D73QNT/pillisya.png", color: "#FFA07A", sides: 3 }, // 세모
-            // 9. 사벨린 (파인애플)
+            // 7. 차티에 (배급)
+            { name: "차티에", radius: 61, score: 50, img: "https://i.ibb.co/G3BV2926/chatie.png", color: "#FFD700", sides: 4 }, 
+            // 8. 필리샤 (복숭아급)
+            { name: "필리샤", radius: 70, score: 60, img: "https://i.ibb.co/Q7D73QNT/pillisya.png", color: "#FFA07A", sides: 3 }, 
+            // 9. 사벨린 (파인애플급)
             { name: "사벨린", radius: 82, score: 70, img: "https://i.ibb.co/QvFw9ZnL/sabellin.png", color: "#DDA0DD", sides: 5 },
-            // 10. 시안 (멜론)
+            // 10. 시안 (멜론급)
             { name: "시안", radius: 96, score: 80, img: "https://i.ibb.co/8LsjcW08/sian.png", color: "#87CEEB", sides: 6 },
-            // 11. 이안 (수박)
+            // 11. 이안 (수박급)
             { name: "이안", radius: 115, score: 100, img: "https://i.ibb.co/Jw84FbmS/ian.png", color: "#FF6347", sides: 0 }
         ];
 
@@ -196,6 +197,7 @@
               Body = Matter.Body,
               Vector = Matter.Vector;
 
+        // [요청 반영] 430px x 754px 고정
         const GAME_WIDTH = 430;
         const GAME_HEIGHT = 754;
 
@@ -389,6 +391,8 @@
         function getCanvasRelativeX(clientX) {
             const canvas = render.canvas;
             const rect = canvas.getBoundingClientRect();
+            // 화면 사이즈 고정이므로 마우스 좌표 스케일링 필요 없음 (1:1)
+            // 하지만 안전장치로 유지
             const scaleX = GAME_WIDTH / rect.width; 
             return (clientX - rect.left) * scaleX;
         }
