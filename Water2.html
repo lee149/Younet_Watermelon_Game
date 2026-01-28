@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>유네트 수박게임 (Fixed Official)</title>
+    <title>유네트 수박게임 (Perfect Ratio)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
     <style>
@@ -18,16 +18,15 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            overflow: auto; /* 화면이 게임보다 작을 경우 스크롤 허용 */
+            overflow: hidden; /* 스크롤 방지 */
         }
         #game-wrapper {
             position: relative;
             display: flex;
             justify-content: center;
             align-items: center;
-            /* 래퍼도 고정 크기 가이드라인 역할 */
-            width: 430px;
-            height: 754px;
+            width: 100%;
+            height: 100%;
         }
         canvas {
             border-radius: 12px;
@@ -35,11 +34,15 @@
             background-color: #FFF8DC;
             display: block;
             
-            /* [요청 반영] 사이즈 절대 고정 (반응형 X) */
-            width: 430px; 
-            height: 754px;
-            min-width: 430px;
-            min-height: 754px;
+            /* [핵심 수정] 비율(430:754)을 절대적으로 유지하면서 화면에 맞게 크기 조절 */
+            width: auto;
+            height: auto;
+            max-width: 430px;
+            max-height: 754px;
+            /* 가로/세로 중 더 좁은 쪽에 맞춰서 비율 유지하며 꽉 채움 */
+            max-width: 100%;
+            max-height: 95vh;
+            aspect-ratio: 430 / 754; 
         }
         .ui-layer {
             position: absolute;
@@ -54,8 +57,12 @@
             pointer-events: none;
             justify-content: space-between;
             box-sizing: border-box;
-            width: 430px; /* UI도 캔버스 폭에 맞춤 */
+            /* UI도 캔버스를 따라가도록 설정 */
+            max-width: 430px; 
         }
+        /* 캔버스가 줄어들 때 UI도 같이 줄어들도록 미디어 쿼리 혹은 JS가 필요할 수 있으나,
+           기본적으로 max-width: 430px과 width: 100%로 대응 */
+        
         .score-box, .next-box {
             background: rgba(255, 255, 255, 0.9);
             padding: 10px 20px;
@@ -88,7 +95,8 @@
             text-align: center;
             box-shadow: 0 20px 50px rgba(0,0,0,0.3);
             z-index: 20;
-            width: 350px; 
+            width: 80%;
+            max-width: 350px; 
         }
         .shake-small { animation: shake 0.2s cubic-bezier(.36,.07,.19,.97) both; }
         .shake-medium { animation: shake 0.4s cubic-bezier(.36,.07,.19,.97) both; }
@@ -154,7 +162,6 @@
         }
 
         // --- 게임 데이터 (430px 폭에 맞는 오리지널 밸런스) ---
-        // 430px 고정이므로 과일 크기도 이 비율에 딱 맞춰야 게임이 성립됨
         const FRUITS = [
             // 1. 각성 이안 (체리급)
             { name: "각성 이안", radius: 18, score: 5, img: "https://i.ibb.co/8ks9F6B/ian-2.jpg", color: "#DC143C", sides: 0 },
@@ -197,7 +204,7 @@
               Body = Matter.Body,
               Vector = Matter.Vector;
 
-        // [요청 반영] 430px x 754px 고정
+        // [오피셜 고정 비율]
         const GAME_WIDTH = 430;
         const GAME_HEIGHT = 754;
 
@@ -391,8 +398,6 @@
         function getCanvasRelativeX(clientX) {
             const canvas = render.canvas;
             const rect = canvas.getBoundingClientRect();
-            // 화면 사이즈 고정이므로 마우스 좌표 스케일링 필요 없음 (1:1)
-            // 하지만 안전장치로 유지
             const scaleX = GAME_WIDTH / rect.width; 
             return (clientX - rect.left) * scaleX;
         }
