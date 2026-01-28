@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>유네트 수박게임 (Perfect Ratio)</title>
+    <title>유네트 수박게임 (Perfect Fit)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
     <style>
@@ -34,14 +34,19 @@
             background-color: #FFF8DC;
             display: block;
             
-            /* [핵심 수정] 비율(430:754)을 절대적으로 유지하면서 화면에 맞게 크기 조절 */
+            /* [모바일 비율 개선] */
+            /* 너비나 높이 중 하나라도 화면을 넘치지 않게 'contain' 개념 적용 */
             width: auto;
             height: auto;
+            
+            /* 최대 너비는 430px (오피셜) */
             max-width: 430px;
-            max-height: 754px;
-            /* 가로/세로 중 더 좁은 쪽에 맞춰서 비율 유지하며 꽉 채움 */
-            max-width: 100%;
-            max-height: 95vh;
+            
+            /* [중요] 모바일에서 너무 길어지지 않게 높이 제한을 80%로 강화 */
+            /* 이렇게 하면 가로가 좁아도 세로 기준에 맞춰서 비율대로 전체 크기가 줄어듦 */
+            max-height: 80vh; 
+            
+            /* 오피셜 비율 고정 */
             aspect-ratio: 430 / 754; 
         }
         .ui-layer {
@@ -57,11 +62,9 @@
             pointer-events: none;
             justify-content: space-between;
             box-sizing: border-box;
-            /* UI도 캔버스를 따라가도록 설정 */
+            /* UI도 캔버스 크기를 넘지 않도록 제한 */
             max-width: 430px; 
         }
-        /* 캔버스가 줄어들 때 UI도 같이 줄어들도록 미디어 쿼리 혹은 JS가 필요할 수 있으나,
-           기본적으로 max-width: 430px과 width: 100%로 대응 */
         
         .score-box, .next-box {
             background: rgba(255, 255, 255, 0.9);
@@ -398,6 +401,8 @@
         function getCanvasRelativeX(clientX) {
             const canvas = render.canvas;
             const rect = canvas.getBoundingClientRect();
+            // 화면상 캔버스 너비와 실제 게임 내부 너비 비율 계산
+            // 너비가 줄어들어도 비율에 맞춰 정확히 계산됨
             const scaleX = GAME_WIDTH / rect.width; 
             return (clientX - rect.left) * scaleX;
         }
